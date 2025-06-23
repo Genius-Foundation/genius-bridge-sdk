@@ -25,6 +25,7 @@ export class GeniusBridgeSdk {
     ChainIdEnum.AVALANCHE,
     ChainIdEnum.BASE,
     ChainIdEnum.SOLANA,
+    ChainIdEnum.SONIC,
     // Add other supported chains
   ];
   public readonly baseUrl: string;

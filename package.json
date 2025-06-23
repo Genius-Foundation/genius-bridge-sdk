@@ -56,6 +56,7 @@
     "test:protocols": "jest tests/protocols",
     "test:integration": "jest tests/integration",
     "test:unit": "jest tests/core tests/utils",
+    "test:e2e": "jest tests/e2e",
     "prepare": "npm run build:clean",
     "prepublishOnly": "npm run lint:check && npm run format:check && npm run test && npm run build:clean",
     "prepack": "npm run build:clean",
