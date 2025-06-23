@@ -1,0 +1,11 @@
+export enum ChainIdEnum {
+  SOLANA = 1399811149,
+  AVALANCHE = 43114,
+  SONIC = 146,
+  BSC = 56,
+  BASE = 8453,
+  ARBITRUM = 42161,
+  OPTIMISM = 10,
+  POLYGON = 137,
+  ETHEREUM = 1,
+}
