@@ -44,77 +44,29 @@ jobs:
       - name: Build package
         run: npm run build:clean
 
-      - name: Extract version from commit message
-        id: extract-version
-        run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          echo "Commit message: $COMMIT_MSG"
-          
-          # Try to extract version from commit message first
-          if [[ "$COMMIT_MSG" =~ chore:\ bump\ version\ to\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            NEW_VERSION="${BASH_REMATCH[1]}"
-            echo "Extracted version from commit message: $NEW_VERSION"
-          elif [[ "$COMMIT_MSG" =~ release/v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            NEW_VERSION="${BASH_REMATCH[1]}"
-            echo "Extracted version from branch name in commit: $NEW_VERSION"
-          elif [[ "$COMMIT_MSG" =~ Release\ v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            NEW_VERSION="${BASH_REMATCH[1]}"
-            echo "Extracted version from release text: $NEW_VERSION"
-          else
-            # Fallback: try to get version from the branch name or PR title
-            BRANCH_NAME="${{ github.ref_name }}"
-            if [[ "$BRANCH_NAME" =~ release/v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-              NEW_VERSION="${BASH_REMATCH[1]}"
-              echo "Extracted version from branch name: $NEW_VERSION"
-            else
-              echo "Could not extract version from commit message: $COMMIT_MSG"
-              echo "Branch name: $BRANCH_NAME"
-              exit 1
-            fi
-          fi
-          
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+      - name: Bump version and create tag
+        id: tag-version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GIT_PAT_TOKEN }}
+          default_bump: patch
+          release_branches: main
+          tag_prefix: v
+          create_annotated_tag: true
 
       - name: Update package.json version
         run: |
-          NEW_VERSION="${{ steps.extract-version.outputs.new_version }}"
-          echo "Updating package.json to version: $NEW_VERSION"
+          NEW_VERSION="${{ steps.tag-version.outputs.new_version }}"
           npm version $NEW_VERSION --no-git-tag-version
           git add package.json package-lock.json
           git commit -m "chore: update package.json to v$NEW_VERSION" || echo "No changes to commit"
           git push origin main
 
-      - name: Generate changelog
-        id: changelog
-        run: |
-          NEW_VERSION="${{ steps.extract-version.outputs.new_version }}"
-          
-          # Get commits since last tag
-          if git tag --list | grep -q "v"; then
-            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-            if [ -n "$LAST_TAG" ]; then
-              CHANGELOG=$(git log --pretty=format:"- %s" ${LAST_TAG}..HEAD | grep -v "chore: bump version" | grep -v "chore: update package.json")
-            else
-              CHANGELOG=$(git log --pretty=format:"- %s" | grep -v "chore: bump version" | grep -v "chore: update package.json")
-            fi
-          else
-            CHANGELOG=$(git log --pretty=format:"- %s" | grep -v "chore: bump version" | grep -v "chore: update package.json")
-          fi
-          
-          # If changelog is empty, add a default message
-          if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="- Initial release"
-          fi
-          
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Update CHANGELOG.md
         run: |
-          NEW_VERSION="${{ steps.extract-version.outputs.new_version }}"
+          NEW_VERSION="${{ steps.tag-version.outputs.new_version }}"
           TODAY=$(date +"%Y-%m-%d")
-          CHANGELOG_CONTENT="${{ steps.changelog.outputs.changelog }}"
+          CHANGELOG_CONTENT="${{ steps.tag-version.outputs.changelog }}"
 
           # Create new changelog entry
           NEW_ENTRY="## [$NEW_VERSION] - $TODAY\n\n$CHANGELOG_CONTENT\n\n---\n\n"
@@ -155,12 +107,6 @@ jobs:
             git push origin main
           fi
 
-      - name: Create git tag
-        run: |
-          NEW_VERSION="${{ steps.extract-version.outputs.new_version }}"
-          git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
-          git push origin "v$NEW_VERSION"
-
       - name: Publish to NPM
         run: npm publish
         env:
@@ -169,18 +115,18 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.extract-version.outputs.new_version }}
-          name: Release v${{ steps.extract-version.outputs.new_version }}
+          tag_name: v${{ steps.tag-version.outputs.new_version }}
+          name: Release v${{ steps.tag-version.outputs.new_version }}
           body: |
-            🚀 **Release v${{ steps.extract-version.outputs.new_version }}**
+            🚀 **Release v${{ steps.tag-version.outputs.new_version }}**
 
-            ${{ steps.changelog.outputs.changelog }}
+            ${{ steps.tag-version.outputs.changelog }}
 
             ## 📦 Installation
             ```bash
             npm install genius-bridge-sdk@latest
             # or
-            npm install genius-bridge-sdk@${{ steps.extract-version.outputs.new_version }}
+            npm install genius-bridge-sdk@${{ steps.tag-version.outputs.new_version }}
             ```
           draft: false
           prerelease: false
@@ -202,17 +148,17 @@ jobs:
               const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: 'Sync main to develop after release v${{ steps.extract-version.outputs.new_version }}',
+                title: 'Sync main to develop after release v${{ steps.tag-version.outputs.new_version }}',
                 head: 'main',
                 base: 'develop',
                 body: [
-                  '🔄 **Sync Release v${{ steps.extract-version.outputs.new_version }} to Develop**',
+                  '🔄 **Sync Release v${{ steps.tag-version.outputs.new_version }} to Develop**',
                   '',
                   'This PR syncs the release changes from `main` back to `develop` to keep both branches in sync.',
                   '',
-                  '## 🚀 Release v${{ steps.extract-version.outputs.new_version }}',
+                  '## 🚀 Release v${{ steps.tag-version.outputs.new_version }}',
                   '',
-                  '${{ steps.changelog.outputs.changelog }}',
+                  '${{ steps.tag-version.outputs.changelog }}',
                   '',
                   '## Why This PR?',
                   'After a release, `main` contains the tagged version and updated changelog, but `develop` is behind. This sync ensures:',
