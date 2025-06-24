@@ -1,6 +1,6 @@
 {
   "name": "genius-bridge-sdk",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "SDK for the Genius Bridge Protocol (GBP)",
   "license": "GNU",
   "author": "Samuel Videau <samuel@videau.io>",
