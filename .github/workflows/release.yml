@@ -44,6 +44,19 @@ jobs:
       - name: Build package
         run: npm run build:clean
 
+      - name: Get version from package.json
+        id: get-version
+        run: |
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Version from package.json: $NEW_VERSION"
+
+      - name: Update package.json version
+        run: |
+          NEW_VERSION="${{ steps.get-version.outputs.new_version }}"
+          echo "Package.json already has version: $NEW_VERSION"
+          # No need to update since release script already did it
+
       - name: Bump version and create tag
         id: tag-version
         uses: mathieudutour/github-tag-action@v6.1
@@ -54,17 +67,9 @@ jobs:
           tag_prefix: v
           create_annotated_tag: true
 
-      - name: Update package.json version
-        run: |
-          NEW_VERSION="${{ steps.tag-version.outputs.new_version }}"
-          npm version $NEW_VERSION --no-git-tag-version
-          git add package.json package-lock.json
-          git commit -m "chore: update package.json to v$NEW_VERSION" || echo "No changes to commit"
-          git push origin main
-
       - name: Update CHANGELOG.md
         run: |
-          NEW_VERSION="${{ steps.tag-version.outputs.new_version }}"
+          NEW_VERSION="${{ steps.get-version.outputs.new_version }}"
           TODAY=$(date +"%Y-%m-%d")
           CHANGELOG_CONTENT="${{ steps.tag-version.outputs.changelog }}"
 
@@ -115,10 +120,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.tag-version.outputs.new_version }}
-          name: Release v${{ steps.tag-version.outputs.new_version }}
+          tag_name: v${{ steps.get-version.outputs.new_version }}
+          name: Release v${{ steps.get-version.outputs.new_version }}
           body: |
-            🚀 **Release v${{ steps.tag-version.outputs.new_version }}**
+            🚀 **Release v${{ steps.get-version.outputs.new_version }}**
 
             ${{ steps.tag-version.outputs.changelog }}
 
@@ -126,7 +131,7 @@ jobs:
             ```bash
             npm install genius-bridge-sdk@latest
             # or
-            npm install genius-bridge-sdk@${{ steps.tag-version.outputs.new_version }}
+            npm install genius-bridge-sdk@${{ steps.get-version.outputs.new_version }}
             ```
           draft: false
           prerelease: false
@@ -148,15 +153,15 @@ jobs:
               const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: 'Sync main to develop after release v${{ steps.tag-version.outputs.new_version }}',
+                title: 'Sync main to develop after release v${{ steps.get-version.outputs.new_version }}',
                 head: 'main',
                 base: 'develop',
                 body: [
-                  '🔄 **Sync Release v${{ steps.tag-version.outputs.new_version }} to Develop**',
+                  '🔄 **Sync Release v${{ steps.get-version.outputs.new_version }} to Develop**',
                   '',
                   'This PR syncs the release changes from `main` back to `develop` to keep both branches in sync.',
                   '',
-                  '## 🚀 Release v${{ steps.tag-version.outputs.new_version }}',
+                  '## 🚀 Release v${{ steps.get-version.outputs.new_version }}',
                   '',
                   '${{ steps.tag-version.outputs.changelog }}',
                   '',
