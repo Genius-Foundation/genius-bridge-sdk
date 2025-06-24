@@ -21,7 +21,6 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 30000, // 30 seconds for network calls
   maxWorkers: 1, // Prevent API rate limiting
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
