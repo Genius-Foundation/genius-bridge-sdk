@@ -10,7 +10,7 @@ import { ChainIdEnum } from './types/enums';
 import { ILogger, LoggerFactory, LogLevelEnum } from './utils/logger';
 import { isSolanaNetwork, isEVMNetwork } from './utils/check-vm';
 import { validateSolanaAddress, validateAndChecksumEvmAddress } from './utils/address-validation';
-import { NATIVE_ADDRESS } from './utils/constants';
+import { NATIVE_ADDRESS, SOL_NATIVE_ADDRESS } from './utils/constants';
 import { isNative } from './utils/is-native';
 
 let logger: ILogger;
@@ -114,7 +114,7 @@ export class GeniusBridgeSdk {
     }
 
     // Validate token addresses based on network type
-    if (isSolanaNetwork(networkIn)) {
+    if (isSolanaNetwork(networkIn) && !isNative(tokenIn)) {
       try {
         validateSolanaAddress(tokenIn);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -132,7 +132,7 @@ export class GeniusBridgeSdk {
       }
     }
 
-    if (isSolanaNetwork(networkOut)) {
+    if (isSolanaNetwork(networkOut) && !isNative(tokenOut)) {
       try {
         validateSolanaAddress(tokenOut);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -186,12 +186,20 @@ export class GeniusBridgeSdk {
     const { amountIn, slippage, from } = params;
 
     // Handle token address transformation
-    if (isEVMNetwork(networkIn) && isNative(tokenIn)) {
-      tokenIn = NATIVE_ADDRESS;
+    if (isNative(tokenIn)) {
+      if (isEVMNetwork(networkIn)) {
+        tokenIn = NATIVE_ADDRESS;
+      } else if (isSolanaNetwork(networkIn)) {
+        tokenIn = SOL_NATIVE_ADDRESS;
+      }
     }
 
-    if (isEVMNetwork(networkOut) && isNative(tokenOut)) {
-      tokenOut = NATIVE_ADDRESS;
+    if (isNative(tokenOut)) {
+      if (isEVMNetwork(networkOut)) {
+        tokenOut = NATIVE_ADDRESS;
+      } else if (isSolanaNetwork(networkOut)) {
+        tokenOut = SOL_NATIVE_ADDRESS;
+      }
     }
 
     return {
