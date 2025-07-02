@@ -115,8 +115,13 @@ if [[ "$RELEASE_TYPE" == "beta" ]]; then
     echo -e "${BLUE}🌿 Creating beta release branch: ${RELEASE_BRANCH}${NC}"
     git checkout -b $RELEASE_BRANCH
     
-    # Create temporary commit to mark release intent
-    git commit --allow-empty -m "chore: bump version to ${NEXT_VERSION}"
+    # Update package.json version
+    echo -e "${BLUE}📝 Updating package.json to version ${NEXT_VERSION}${NC}"
+    npm version ${NEXT_VERSION} --no-git-tag-version
+    
+    # Commit the version update
+    git add package.json package-lock.json
+    git commit -m "chore: bump version to ${NEXT_VERSION}"
     
     # Push release branch
     echo -e "${BLUE}📤 Pushing beta release branch...${NC}"
@@ -186,8 +191,13 @@ else
     echo -e "${BLUE}🌿 Creating stable release branch: ${RELEASE_BRANCH}${NC}"
     git checkout -b $RELEASE_BRANCH
     
-    # Create temporary commit to mark release intent
-    git commit --allow-empty -m "chore: bump version to ${NEXT_VERSION}"
+    # Update package.json version
+    echo -e "${BLUE}📝 Updating package.json to version ${NEXT_VERSION}${NC}"
+    npm version ${NEXT_VERSION} --no-git-tag-version
+    
+    # Commit the version update
+    git add package.json package-lock.json
+    git commit -m "chore: bump version to ${NEXT_VERSION}"
     
     # Push release branch
     echo -e "${BLUE}📤 Pushing stable release branch...${NC}"
