@@ -71,10 +71,17 @@ jobs:
         run: |
           NEW_VERSION="${{ steps.get-version.outputs.new_version }}"
           TODAY=$(date +"%Y-%m-%d")
-          CHANGELOG_CONTENT="${{ steps.tag-version.outputs.changelog }}"
+          
+          # Safely capture changelog content using a here document to avoid command interpretation
+          cat << 'CHANGELOG_EOF' > changelog_content.txt
+          ${{ steps.tag-version.outputs.changelog }}
+          CHANGELOG_EOF
+          
+          # Read the changelog content safely
+          CHANGELOG_CONTENT=$(cat changelog_content.txt)
 
-          # Create new changelog entry
-          NEW_ENTRY="## [$NEW_VERSION] - $TODAY\n\n$CHANGELOG_CONTENT\n\n---\n\n"
+          # Create new changelog entry using printf for safer string handling
+          NEW_ENTRY=$(printf "## [%s] - %s\n\n%s\n\n---\n\n" "$NEW_VERSION" "$TODAY" "$CHANGELOG_CONTENT")
 
           # Update or create CHANGELOG.md
           if [ -f "CHANGELOG.md" ]; then
@@ -84,13 +91,13 @@ jobs:
               {
                 head -n 1 CHANGELOG.md
                 echo ""
-                echo -e "$NEW_ENTRY"
+                printf "%s" "$NEW_ENTRY"
                 tail -n +2 CHANGELOG.md
               } > CHANGELOG_temp.md && mv CHANGELOG_temp.md CHANGELOG.md
             else
               # No title, prepend entry
               {
-                echo -e "$NEW_ENTRY"
+                printf "%s" "$NEW_ENTRY"
                 cat CHANGELOG.md
               } > CHANGELOG_temp.md && mv CHANGELOG_temp.md CHANGELOG.md
             fi
@@ -101,9 +108,12 @@ jobs:
               echo ""
               echo "All notable changes to this project will be documented in this file."
               echo ""
-              echo -e "$NEW_ENTRY"
+              printf "%s" "$NEW_ENTRY"
             } > CHANGELOG.md
           fi
+
+          # Clean up temporary file
+          rm -f changelog_content.txt
 
           # Commit changelog if there are changes
           if ! git diff --quiet CHANGELOG.md; then
