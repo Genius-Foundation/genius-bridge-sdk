@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Release script for genius-bridge-sdk SDK
-# Usage: ./scripts/release.sh [patch|minor|major|beta]
+# Usage: ./scripts/release.sh [patch|minor|major|beta] [--force]
 
 set -e
 
@@ -12,98 +12,120 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default to patch if no argument provided
+# Parse arguments
 RELEASE_TYPE=${1:-patch}
+FORCE_MODE=false
+
+# Check for --force flag
+if [[ "$1" == "--force" ]] || [[ "$2" == "--force" ]]; then
+    FORCE_MODE=true
+    # If --force is the first argument, use patch as default
+    if [[ "$1" == "--force" ]]; then
+        RELEASE_TYPE=${2:-patch}
+    fi
+fi
 
 echo -e "${BLUE}🚀 Starting release process for: ${RELEASE_TYPE}${NC}"
+if [[ "$FORCE_MODE" == "true" ]]; then
+    echo -e "${YELLOW}⚠️  Force mode enabled - bypassing all checks${NC}"
+fi
 
 # Check if GitHub CLI is installed
 if ! command -v gh &> /dev/null; then
-    echo -e "${RED}❌ Error: GitHub CLI (gh) is required but not installed${NC}"
-    echo -e "${YELLOW}Install it with: brew install gh (macOS) or visit https://cli.github.com${NC}"
-    exit 1
+    if [[ "$FORCE_MODE" == "true" ]]; then
+        echo -e "${YELLOW}⚠️  GitHub CLI (gh) not found, but continuing due to force mode${NC}"
+    else
+        echo -e "${RED}❌ Error: GitHub CLI (gh) is required but not installed${NC}"
+        echo -e "${YELLOW}Install it with: brew install gh (macOS) or visit https://cli.github.com${NC}"
+        exit 1
+    fi
 fi
 
 # Check if authenticated with GitHub CLI
 if ! gh auth status &> /dev/null; then
-    echo -e "${RED}❌ Error: Not authenticated with GitHub CLI${NC}"
-    echo -e "${YELLOW}Run: gh auth login${NC}"
-    exit 1
+    if [[ "$FORCE_MODE" == "true" ]]; then
+        echo -e "${YELLOW}⚠️  Not authenticated with GitHub CLI, but continuing due to force mode${NC}"
+    else
+        echo -e "${RED}❌ Error: Not authenticated with GitHub CLI${NC}"
+        echo -e "${YELLOW}Run: gh auth login${NC}"
+        exit 1
+    fi
 fi
 
 # Get current branch
 CURRENT_BRANCH=$(git branch --show-current)
 
 # Check branch requirements
-if [[ "$RELEASE_TYPE" == "beta" ]]; then
-    # Beta releases should be done from develop
-    if [[ "$CURRENT_BRANCH" != "develop" ]]; then
-        echo -e "${RED}❌ Error: Beta releases must be done from develop branch${NC}"
-        echo -e "${YELLOW}Current branch: $CURRENT_BRANCH${NC}"
-        echo -e "${BLUE}Switch to develop: ${YELLOW}git checkout develop${NC}"
-        exit 1
+if [[ "$FORCE_MODE" != "true" ]]; then
+    if [[ "$RELEASE_TYPE" == "beta" ]]; then
+        # Beta releases should be done from develop
+        if [[ "$CURRENT_BRANCH" != "develop" ]]; then
+            echo -e "${RED}❌ Error: Beta releases must be done from develop branch${NC}"
+            echo -e "${YELLOW}Current branch: $CURRENT_BRANCH${NC}"
+            echo -e "${BLUE}Switch to develop: ${YELLOW}git checkout develop${NC}"
+            exit 1
+        fi
+    else
+        # Stable releases should be done from develop
+        if [[ "$CURRENT_BRANCH" != "develop" ]]; then
+            echo -e "${RED}❌ Error: Stable releases must be done from develop branch${NC}"
+            echo -e "${YELLOW}Current branch: $CURRENT_BRANCH${NC}"
+            echo -e "${BLUE}Switch to develop: ${YELLOW}git checkout develop${NC}"
+            exit 1
+        fi
     fi
 else
-    # Stable releases should be done from develop
-    if [[ "$CURRENT_BRANCH" != "develop" ]]; then
-        echo -e "${RED}❌ Error: Stable releases must be done from develop branch${NC}"
-        echo -e "${YELLOW}Current branch: $CURRENT_BRANCH${NC}"
-        echo -e "${BLUE}Switch to develop: ${YELLOW}git checkout develop${NC}"
-        exit 1
-    fi
+    echo -e "${YELLOW}⚠️  Branch check bypassed due to force mode${NC}"
 fi
 
 # Check if working directory is clean
 if [[ -n $(git status --porcelain) ]]; then
-    echo -e "${RED}❌ Error: Working directory is not clean${NC}"
-    echo -e "${YELLOW}Please commit or stash your changes before releasing${NC}"
-    exit 1
+    if [[ "$FORCE_MODE" == "true" ]]; then
+        echo -e "${YELLOW}⚠️  Working directory is not clean, but continuing due to force mode${NC}"
+        echo -e "${YELLOW}Uncommitted changes:${NC}"
+        git status --short
+    else
+        echo -e "${RED}❌ Error: Working directory is not clean${NC}"
+        echo -e "${YELLOW}Please commit or stash your changes before releasing${NC}"
+        exit 1
+    fi
 fi
 
 # Pull latest changes
-echo -e "${BLUE}📥 Pulling latest changes...${NC}"
-git pull origin $CURRENT_BRANCH
+if [[ "$FORCE_MODE" != "true" ]]; then
+    echo -e "${BLUE}📥 Pulling latest changes...${NC}"
+    git pull origin $CURRENT_BRANCH
+else
+    echo -e "${YELLOW}⚠️  Skipping git pull due to force mode${NC}"
+fi
 
 # Run tests and checks
-echo -e "${BLUE}🧪 Running tests and checks...${NC}"
-npm run lint:check
-npm run format:check
-npm run test
-npm run build:clean
+if [[ "$FORCE_MODE" != "true" ]]; then
+    echo -e "${BLUE}🧪 Running tests and checks...${NC}"
+    npm run lint:check
+    npm run format:check
+    npm run test
+    npm run build:clean
+else
+    echo -e "${YELLOW}⚠️  Skipping tests and checks due to force mode${NC}"
+fi
 
-# Get current version and calculate next version
+# Get current version
 CURRENT_VERSION=$(node -p "require('./package.json').version")
 echo -e "${BLUE}📋 Current version: ${CURRENT_VERSION}${NC}"
 
-# Calculate next version based on release type
+# For stable releases, we'll let the GitHub Action determine the exact version
+# based on semantic versioning and conventional commits
 if [[ "$RELEASE_TYPE" == "beta" ]]; then
+    # Beta releases get a timestamp suffix
     NEXT_VERSION="${CURRENT_VERSION}-beta.$(date +%Y%m%d%H%M%S)"
+    echo -e "${BLUE}📋 Beta version will be: ${NEXT_VERSION}${NC}"
 else
-    # Split version into components
-    IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
-    MAJOR="${VERSION_PARTS[0]}"
-    MINOR="${VERSION_PARTS[1]}"
-    PATCH="${VERSION_PARTS[2]}"
-
-    # Calculate next version based on release type
-    case "$RELEASE_TYPE" in
-        "major")
-            NEXT_VERSION="$((MAJOR + 1)).0.0"
-            ;;
-        "minor")
-            NEXT_VERSION="${MAJOR}.$((MINOR + 1)).0"
-            ;;
-        "patch")
-            NEXT_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-            ;;
-        *)
-            echo -e "${RED}❌ Error: Invalid release type: ${RELEASE_TYPE}${NC}"
-            exit 1
-            ;;
-    esac
+    # For stable releases, we'll use a placeholder that the GitHub Action will replace
+    # The action will determine the exact version based on conventional commits
+    echo -e "${BLUE}📋 Version will be determined by GitHub Action based on conventional commits${NC}"
+    echo -e "${BLUE}📋 Expected bump type: ${RELEASE_TYPE}${NC}"
 fi
-
-echo -e "${BLUE}📋 Next version will be: ${NEXT_VERSION}${NC}"
 
 # Determine workflow based on release type
 if [[ "$RELEASE_TYPE" == "beta" ]]; then
@@ -115,13 +137,8 @@ if [[ "$RELEASE_TYPE" == "beta" ]]; then
     echo -e "${BLUE}🌿 Creating beta release branch: ${RELEASE_BRANCH}${NC}"
     git checkout -b $RELEASE_BRANCH
     
-    # Update package.json version
-    echo -e "${BLUE}📝 Updating package.json to version ${NEXT_VERSION}${NC}"
-    npm version ${NEXT_VERSION} --no-git-tag-version
-    
-    # Commit the version update
-    git add package.json package-lock.json
-    git commit -m "chore: bump version to ${NEXT_VERSION}"
+    # Create temporary commit to mark release intent
+    git commit --allow-empty -m "chore: bump version to ${NEXT_VERSION}"
     
     # Push release branch
     echo -e "${BLUE}📤 Pushing beta release branch...${NC}"
@@ -135,7 +152,7 @@ This PR prepares a beta release from the develop branch.
 
 ## What happens when merged:
 1. GitHub Actions will automatically:
-   - Generate version number with beta suffix
+   - Use the specified beta version: ${NEXT_VERSION}
    - Create changelog from commit history and PRs
    - Create git tag
    - Publish to NPM with \`beta\` tag
@@ -186,43 +203,41 @@ else
     # Capitalize release type for display
     RELEASE_TYPE_CAPITALIZED="$(echo ${RELEASE_TYPE:0:1} | tr '[:lower:]' '[:upper:]')$(echo ${RELEASE_TYPE:1})"
     
-    # Create release branch with version number
-    RELEASE_BRANCH="release/v${NEXT_VERSION}"
+    # Create release branch with generic name (version will be determined by GitHub Action)
+    RELEASE_BRANCH="release/${RELEASE_TYPE}-$(date +%Y%m%d%H%M%S)"
     echo -e "${BLUE}🌿 Creating stable release branch: ${RELEASE_BRANCH}${NC}"
     git checkout -b $RELEASE_BRANCH
     
-    # Update package.json version
-    echo -e "${BLUE}📝 Updating package.json to version ${NEXT_VERSION}${NC}"
-    npm version ${NEXT_VERSION} --no-git-tag-version
-    
-    # Commit the version update
-    git add package.json package-lock.json
-    git commit -m "chore: bump version to ${NEXT_VERSION}"
+    # Create temporary commit to mark release intent
+    # The GitHub Action will look for this pattern to trigger
+    git commit --allow-empty -m "release/${RELEASE_TYPE}"
     
     # Push release branch
     echo -e "${BLUE}📤 Pushing stable release branch...${NC}"
     git push origin $RELEASE_BRANCH
     
     # Create PR from release branch to main
-    PR_TITLE="🚀 ${RELEASE_TYPE_CAPITALIZED} Release v${NEXT_VERSION}"
-    PR_BODY="🚀 **${RELEASE_TYPE_CAPITALIZED} Release v${NEXT_VERSION}**
+    PR_TITLE="🚀 ${RELEASE_TYPE_CAPITALIZED} Release"
+    PR_BODY="🚀 **${RELEASE_TYPE_CAPITALIZED} Release**
 
 This PR contains a ${RELEASE_TYPE} release from the develop branch.
 
 ## What happens when merged to main:
 1. GitHub Actions will automatically:
-   - Generate new version number (${RELEASE_TYPE} bump)
+   - Analyze conventional commits to determine exact version bump (${RELEASE_TYPE})
+   - Generate new version number based on semantic versioning
    - Create comprehensive changelog from commit history and PRs
    - Create git tag
    - Update package.json version
    - Update CHANGELOG.md file
    - Publish to NPM with \`latest\` tag
    - Create GitHub release
-   - Create sync PR back to develop
+   - Push changes directly back to develop (no sync PR needed)
 
 ## Release Type
 - ${RELEASE_TYPE_CAPITALIZED} release (will be published to NPM with \`latest\` tag)
 - All features and fixes from develop branch (frozen at release branch creation)
+- Version determined by conventional commits and semantic versioning
 
 ## Installation after release:
 \`\`\`bash
@@ -232,7 +247,7 @@ npm install genius-bridge-sdk@latest
 ## Next Steps
 1. Review and merge this PR to main
 2. The release will be automatically published via GitHub Actions with full changelog
-3. Main will be synced back to develop automatically
+3. Main will be automatically synced back to develop
 
 ## Changelog Preview
 The final changelog will be automatically generated from:
@@ -268,3 +283,7 @@ fi
 echo -e "${BLUE}🎉 Release process completed!${NC}"
 echo -e "${YELLOW}⏳ The changelog will be automatically generated from your commit history and PRs when the PR is merged.${NC}"
 echo -e "${GREEN}💡 Tip: Use conventional commit messages (feat:, fix:, docs:, etc.) for better changelog categorization!${NC}"
+
+if [[ "$FORCE_MODE" == "true" ]]; then
+    echo -e "${YELLOW}⚠️  This release was created with --force mode. Please ensure all checks pass manually before merging!${NC}"
+fi
