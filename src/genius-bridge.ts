@@ -43,9 +43,7 @@ export class GeniusBridgeSdk {
     logger = LoggerFactory.getLogger();
 
     // Apply configuration with defaults
-    this.baseUrl =
-      config?.geniusBridgeBaseUrl ||
-      'http://genius-bridge-staging-894762848.us-east-2.elb.amazonaws.com';
+    this.baseUrl = config?.geniusBridgeBaseUrl || 'https://bridge-api.tradegeniuses.net';
     this.priceEndpoint = '/quoting/price';
     this.quoteEndpoint = '/quoting/quote';
   }
